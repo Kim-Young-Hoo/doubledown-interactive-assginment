@@ -1,5 +1,7 @@
-package com.doubledown.assignment.crawler;
+package com.doubledown.assignment.crawlers;
 
+
+import com.doubledown.assignment.models.CrawlerSetting;
 
 /*
 * daum news crawler
@@ -10,5 +12,19 @@ package com.doubledown.assignment.crawler;
 * title : .item-title > .tit-g clamp-g > a.text
 * description : .item-contents > .conts-desc .clamp-g2 > a.text
 * */
-public class DaumCrawler {
+public class DaumCrawler implements ICrawler {
+    @Override
+    public void startCrawl() {
+
+    }
+
+    @Override
+    public String getNews() {
+        return null;
+    }
+
+    @Override
+    public Boolean saveNews(String news, CrawlerSetting crawlerSetting) {
+        return null;
+    }
 }

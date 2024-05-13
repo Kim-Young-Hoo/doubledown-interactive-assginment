@@ -1,5 +1,16 @@
-package com.doubledown.assignment.crawler;
+package com.doubledown.assignment.crawlers;
 
+import com.doubledown.assignment.models.CrawlerSetting;
+import com.doubledown.assignment.models.News;
+import com.doubledown.assignment.models.NewsMedia;
+import com.doubledown.assignment.models.NewsMediaType;
+import com.doubledown.assignment.responses.NaverNewsItem;
+import com.doubledown.assignment.responses.NaverNewsResponse;
+import com.doubledown.assignment.services.CrawlerSettingService;
+import com.doubledown.assignment.services.NewsMediaService;
+import com.doubledown.assignment.services.NewsService;
+import com.google.gson.Gson;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -7,7 +18,12 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -23,27 +39,46 @@ import java.util.logging.Logger;
 * */
 
 @Service
-public class NaverCrawler {
+public class NaverCrawler implements ICrawler {
     private static final Logger LOGGER = Logger.getLogger(NaverCrawler.class.getName());
 
-    @Scheduled(fixedRate = 600000)
-    public void crawlNews() {
+    @Autowired
+    private NewsService newsService;
 
+    @Autowired
+    private NewsMediaService newsMediaService;
+
+    @Autowired
+    private CrawlerSettingService crawlerSettingService;
+
+    @Scheduled(fixedRate = 600000)
+    public void startCrawl() {
         LOGGER.info("Starting crawl process...");
         String clientId = "AbgeKLpkyt5E6xwdDG8Z";
         String clientSecret = "0C0r1_cm2e";
-
-        String apiURL = "https://openapi.naver.com/v1/search/news?query=NCSOFT";
         Map<String, String> requestHeaders = new HashMap<>();
         requestHeaders.put("X-Naver-Client-Id", clientId);
         requestHeaders.put("X-Naver-Client-Secret", clientSecret);
-        String responseBody = get(apiURL, requestHeaders);
 
-        LOGGER.info(responseBody);
+        NewsMedia newsMedia = newsMediaService.getNewsMedia(NewsMediaType.NAVER);
+        List<CrawlerSetting> crawlerSettings = crawlerSettingService.getCrawlerSettings(newsMedia);
+
+        for (CrawlerSetting crawlerSetting : crawlerSettings) {
+            String apiURL = "https://openapi.naver.com/v1/search/news?query=" + crawlerSetting.getKeyword();
+            String responseBody = getNews(apiURL, requestHeaders);
+            LOGGER.info(responseBody);
+            saveNews(responseBody, crawlerSetting);
+        }
+
         LOGGER.info("Crawl process completed.");
     }
 
-    private static String get(String apiUrl, Map<String, String> requestHeaders) {
+    @Override
+    public String getNews() {
+        return null;
+    }
+
+    public String getNews(String apiUrl, Map<String, String> requestHeaders) {
         HttpURLConnection con = connect(apiUrl);
         try {
             con.setRequestMethod("GET");
@@ -90,5 +125,28 @@ public class NaverCrawler {
         } catch (IOException e) {
             throw new RuntimeException("API 응답을 읽는데 실패했습니다.", e);
         }
+    }
+
+    @Override
+    public Boolean saveNews(String newsResponse, CrawlerSetting crawlerSetting) {
+
+        Boolean isSuccessful = true;
+        Gson gson = new Gson();
+        NaverNewsResponse naverNewsResponse = gson.fromJson(newsResponse, NaverNewsResponse.class);
+        for (NaverNewsItem newsItem : naverNewsResponse.getItems()) {
+            System.out.print(newsItem);
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH);
+
+            try {
+                LocalDateTime dateTime = LocalDateTime.parse(newsItem.getPubDate(), formatter);
+                News news = new News(newsItem.getTitle(), newsItem.getDescription(), dateTime, newsItem.getOriginallink(), crawlerSetting);
+                newsService.save(news);
+            } catch (DateTimeParseException e) {
+                e.printStackTrace();
+                isSuccessful = false;
+            }
+        }
+        return isSuccessful;
     }
 }
